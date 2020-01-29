@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "API Gateway integration with SQS"
+Parameters:
+  ApiGatewayRestApi:
+    Type: 'String'
+    Default: ApiGatewayRestApi
+Resources:
+  SQSQueue:
+    Type: "AWS::SQS::Queue"
+    Properties:
+      QueueName: 'AwesomeQ'
+      ContentBasedDeduplication: 1
+      DelaySeconds : 15
+      FifoQueue: 1
+      MaximumMessageSize: 268,199
+      MessageRetentionPeriod: 500,500
+      ReceiveMessageWaitTimeSeconds: 20
+      VisibilityTimeout: 50
+
+  MyRestAPI:
+    Type: "AWS::ApiGateway::RestApi"
+    Properties:
+      Name: !Ref ApiGatewayRestApi
+
+  SQSAPIMethod:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      HttpMethod: POST
+      AuthorizationType: "NONE"
+      MethodResponses:
+        - StatusCode: "200"
+          ResponseParameters:
+            "method.response.header.Access-Control-Allow-Origin": true
+      Integration:
+          TYPE: AWS
+          Credentials:
+          Fn::GetAtt:  [ "APIGatewaySQSIAM", "Arn" ]
+          IntegrationHttpMethod: POST
+          RequestTemplates:
+            "application/json": "{statusCode:200}"
+          IntegrationResponses:
+           -
+             StatusCode: "200"
+             ResponseParameters:
+               "method.response.header.Access-Control-Allow-Origin": "'*'"
+             ResponseTemplates:
+               "application/json": ""
+           Uri: arn:aws:apigateway:$(AWS::region)/sqs:path/$(AWS::accountid)/AwesomeQ
+
+
+      ResourceId : !Ref createAPIGateway
+      RestApiId: !Ref ApiGatewayRestApi
+
+  createAPIGateway:
+     Type: "AWS::ApiGateway::Resource"
+     Properties:
+       ParentId: !GetAtt:
+           -ApiGatewayRestApi
+           -RootResourceId
+       PathPart: "createnotification"
+       RestApiId: !Ref ApiGatewayRestApi
+
+  APIGatewaySQSIAM:
+     Type: AWS::IAM::Role
+     Properties:
+       Path: /
+       AssumeRolePolicyDocument:
+         Version: '2012-10-17'
+         Statement:
+           - Effect: Allow
+             Principal:
+               Service:
+                 - apigateway.amazonaws.com
+             Action: sts:AssumeRole
+         Policies:
+           - PolicyName: APIGATEWAYIAMAll
+               PolicyDocument:
+                 Version: '2012-10-17'
+                 Statement:
+                   - Effect: Allow
+                     Resource: "*"
+                     Action:
+                       - "sqs:SendMessage"
+                       -
+  LambdaFunction:
+     Type: AWS::Lambda::Function
+     Properties:
+      Code:
+        S3Bucket: my-source-bucket
+        S3Key:
+      Handler:
+      Role:
+      Runtime:
+      Timeout: 60
+
+  LambdaExecutionRole:
+     Type: AWS::IAM::Role
+     Properties:
+        Path: /
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
+                Policies:
+                  - PolicyName: allowLambdaLogs
+                    PolicyDocument:
+                      Version: '2012-10-17'
+                      Statement:
+                        - Effect: Allow
+                          Action: *
+                          Resource: *
+                  - PolicyName: allowSqs
+                    PolicyDocument:
+                      Version: '2012-10-17'
+                      Statement:
+                        - Effect: Allow
+                          Action: *
+                          Resource: !GetAtt SQSQueue.
+  LambdaFunction2:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: my-source-bucket
+        S3Key:
+      Handler:
+      Role:
+      Runtime:
+      Timeout: 60
